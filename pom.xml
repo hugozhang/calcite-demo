@@ -12,7 +12,6 @@
     <name>calcite-demo</name>
 
     <modules>
-        <module>sqlparser</module>
         <module>calcite-parser</module>
         <module>calcite-parser/fmpp-demo</module>
         <module>calcite-parser/javacc-demo</module>
@@ -33,8 +32,8 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
 
-        <calcite.version>1.32.0</calcite.version>
-        <avatica.version>1.22.0</avatica.version>
+        <calcite.version>1.34.0</calcite.version>
+        <avatica.version>1.23.0</avatica.version>
 
         <logback.version>1.2.3</logback.version>
     </properties>

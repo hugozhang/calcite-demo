@@ -1,8 +1,7 @@
 package com.github.pioneeryi;
 
 import org.apache.calcite.DataContext;
-import org.apache.calcite.adapter.enumerable.EnumerableInterpretable;
-import org.apache.calcite.adapter.enumerable.EnumerableRel;
+import org.apache.calcite.adapter.enumerable.*;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -10,12 +9,20 @@ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.linq4j.QueryProvider;
+import org.apache.calcite.plan.ConventionTraitDef;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgramBuilder;
+import org.apache.calcite.plan.volcano.VolcanoPlanner;
+import org.apache.calcite.rel.RelDistributionTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.FilterJoinRule;
+import org.apache.calcite.rel.rules.PruneEmptyRules;
+import org.apache.calcite.rel.rules.ReduceExpressionsRule;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -65,12 +72,13 @@ public class Main {
         RelRoot relRoot = toRelNode(validatedSqlNode);
         System.out.println(RelOptUtil.toString(relRoot.rel, ALL_ATTRIBUTES));
 
-        // 对查询进行优化
+
+//        //对查询进行优化
         RelNode optimizedRelNode = optimize(relRoot.rel);
         System.out.println(RelOptUtil.toString(optimizedRelNode, ALL_ATTRIBUTES));
 
         // 执行
-        //execute(relRoot.rel);
+//        execute(optimizedRelNode);
     }
 
     private static SqlNode sqlParse(String sql) {
@@ -97,6 +105,33 @@ public class Main {
         } catch (RelConversionException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static RelNode pyOptimize(RelNode relNode){
+        //1. 初始化 VolcanoPlanner 对象，并添加相应的 Rule
+        VolcanoPlanner planner = new VolcanoPlanner();
+        planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+        planner.addRelTraitDef(RelDistributionTraitDef.INSTANCE);
+// 添加相应的 rule
+        planner.addRule(CoreRules.FILTER_INTO_JOIN);
+        planner.addRule(CoreRules.SORT_REMOVE);
+//        planner.addRule(ReduceExpressionsRule.PROJECT_INSTANCE);
+        planner.addRule(PruneEmptyRules.PROJECT_INSTANCE);
+// 添加相应的 ConverterRule
+        planner.addRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_VALUES_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_PROJECT_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_FILTER_RULE);
+//2. Changes a relational expression to an equivalent one with a different set of traits.
+        RelTraitSet desiredTraits =
+                relNode.getCluster().traitSet().replace(EnumerableConvention.INSTANCE);
+        relNode = planner.changeTraits(relNode, desiredTraits);
+//3. 通过 VolcanoPlanner 的 setRoot 方法注册相应的 RelNode，并进行相应的初始化操作
+        planner.setRoot(relNode);
+//4. 通过动态规划算法找到 cost 最小的 plan
+        relNode = planner.findBestExp();
+        return relNode;
     }
 
     private static RelNode optimize(RelNode relNode) {
