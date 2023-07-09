@@ -73,12 +73,36 @@ public class Main {
         System.out.println(RelOptUtil.toString(relRoot.rel, ALL_ATTRIBUTES));
 
 
+        RelOptPlanner relOptPlanner = relRoot.rel.getCluster().getPlanner();
+        relOptPlanner.getRelTraitDefs().clear();
+        relOptPlanner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+        relOptPlanner.addRelTraitDef(RelDistributionTraitDef.INSTANCE);
+// 添加相应的 rule
+        relOptPlanner.addRule(CoreRules.FILTER_INTO_JOIN);
+        relOptPlanner.addRule(CoreRules.SORT_REMOVE);
+//        planner.addRule(ReduceExpressionsRule.PROJECT_INSTANCE);
+        relOptPlanner.addRule(PruneEmptyRules.PROJECT_INSTANCE);
+// 添加相应的 ConverterRule
+        relOptPlanner.addRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+        relOptPlanner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
+        relOptPlanner.addRule(EnumerableRules.ENUMERABLE_VALUES_RULE);
+        relOptPlanner.addRule(EnumerableRules.ENUMERABLE_PROJECT_RULE);
+        relOptPlanner.addRule(EnumerableRules.ENUMERABLE_FILTER_RULE);
+
+
+        RelTraitSet desiredTraits =
+                relRoot.rel.getCluster().traitSet().replace(EnumerableConvention.INSTANCE);
+        RelNode relNode = relOptPlanner.changeTraits(relRoot.rel, desiredTraits);
+        relOptPlanner.setRoot(relNode);
+        RelNode optimizedRelNode = relOptPlanner.findBestExp();
+
+
 //        //对查询进行优化
-        RelNode optimizedRelNode = optimize(relRoot.rel);
+//        RelNode optimizedRelNode = optimize(relRoot.rel);
         System.out.println(RelOptUtil.toString(optimizedRelNode, ALL_ATTRIBUTES));
 
         // 执行
-//        execute(optimizedRelNode);
+        execute(optimizedRelNode);
     }
 
     private static SqlNode sqlParse(String sql) {
@@ -113,16 +137,22 @@ public class Main {
         planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
         planner.addRelTraitDef(RelDistributionTraitDef.INSTANCE);
 // 添加相应的 rule
+
+        planner.addRule(CoreRules.FILTER_TO_CALC);
+        planner.addRule(CoreRules.PROJECT_TO_CALC);
+        planner.addRule(CoreRules.FILTER_CALC_MERGE);
+        planner.addRule(CoreRules.PROJECT_CALC_MERGE);
         planner.addRule(CoreRules.FILTER_INTO_JOIN);
-        planner.addRule(CoreRules.SORT_REMOVE);
-//        planner.addRule(ReduceExpressionsRule.PROJECT_INSTANCE);
-        planner.addRule(PruneEmptyRules.PROJECT_INSTANCE);
+
 // 添加相应的 ConverterRule
-        planner.addRule(EnumerableRules.ENUMERABLE_MERGE_JOIN_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_TABLE_SCAN_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_PROJECT_TO_CALC_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_FILTER_TO_CALC_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_JOIN_RULE);
         planner.addRule(EnumerableRules.ENUMERABLE_SORT_RULE);
-        planner.addRule(EnumerableRules.ENUMERABLE_VALUES_RULE);
-        planner.addRule(EnumerableRules.ENUMERABLE_PROJECT_RULE);
-        planner.addRule(EnumerableRules.ENUMERABLE_FILTER_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_CALC_RULE);
+        planner.addRule(EnumerableRules.ENUMERABLE_AGGREGATE_RULE);
+
 //2. Changes a relational expression to an equivalent one with a different set of traits.
         RelTraitSet desiredTraits =
                 relNode.getCluster().traitSet().replace(EnumerableConvention.INSTANCE);
